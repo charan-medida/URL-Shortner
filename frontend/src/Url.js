@@ -26,7 +26,7 @@ const Url = () => {
                 fetchUpdatedData();
             }
 
-            const shortUrl = `http://localhost:8081/${response.data}`;
+            const shortUrl = `https://url-shortner-8jno.onrender.com/${response.data}`;
             setShortUrl(shortUrl);
 
             navigate('/smallurl', { state: { shortUrl } });
