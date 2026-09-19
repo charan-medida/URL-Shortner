@@ -59,7 +59,14 @@ public String shortenUrl(@RequestBody String originalUrl,
             return existingMapping;
         }
         
-        String shortUrl = generateShortUrl();
+        String shortUrl;
+        while(true)
+        {
+            shortUrl = generateShortUrl();
+            UrlMapping exist = urlMappingRepository.findByShortUrl(shortUrl);
+            if(exist == null)
+                break;
+        }
         UrlMapping urlMapping = new UrlMapping();
         urlMapping.setOriginalUrl(originalUrl);
         urlMapping.setShortUrl(shortUrl);
