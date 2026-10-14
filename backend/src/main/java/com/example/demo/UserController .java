@@ -28,7 +28,7 @@ class UserController {
         }
 
         userRepository.save(user);
-        return ResponseEntity.status(HttpStatus.CREATED).body("User registered successfully");
+        return ResponseEntity.status(HttpStatus.CREATED).body("User registered successfully Medida");
     }
 
 
