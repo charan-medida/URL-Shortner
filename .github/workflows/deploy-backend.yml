@@ -1,0 +1,113 @@
+
+name: Deploy URL Shortener Backend
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "backend/**"
+      - ".github/workflows/deploy-backend.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-url-shortener-backend
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build and deploy backend
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: corretto
+          java-version: "17"
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+
+      - name: Build Spring Boot JAR
+        working-directory: backend
+        run: |
+          chmod +x mvnw
+          ./mvnw -B clean package -DskipTests
+
+      - name: Configure AWS credentials using OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Upload JAR to private S3 bucket
+        run: |
+          aws s3 cp backend/target/backend-0.0.1-SNAPSHOT.jar \
+            "s3://${{ vars.S3_DEPLOY_BUCKET }}/backend/backend-0.0.1-SNAPSHOT.jar"
+
+      - name: Deploy JAR and restart service through SSM
+        env:
+          DEPLOY_BUCKET: ${{ vars.S3_DEPLOY_BUCKET }}
+          INSTANCE_ID: i-049daaac6c98e64e7
+        run: |
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --comment "Deploy URL Shortener backend from GitHub Actions" \
+            --parameters 'commands=[
+              "set -eu",
+              "BUCKET='"$DEPLOY_BUCKET"'",
+              "APP_DIR=/home/ec2-user/URL-Shortner/backend",
+              "JAR_NAME=backend-0.0.1-SNAPSHOT.jar",
+              "NEW_JAR=/tmp/backend-0.0.1-SNAPSHOT.jar",
+              "aws s3 cp s3://'"$DEPLOY_BUCKET"'/backend/backend-0.0.1-SNAPSHOT.jar \"$NEW_JAR\"",
+              "test -s \"$NEW_JAR\"",
+              "chown ec2-user:ec2-user \"$NEW_JAR\"",
+              "if [ -f \"$APP_DIR/target/$JAR_NAME\" ]; then cp \"$APP_DIR/target/$JAR_NAME\" \"$APP_DIR/target/$JAR_NAME.bak\"; fi",
+              "install -o ec2-user -g ec2-user -m 0644 \"$NEW_JAR\" \"$APP_DIR/target/$JAR_NAME\"",
+              "if ! systemctl restart url-shortener; then cp \"$APP_DIR/target/$JAR_NAME.bak\" \"$APP_DIR/target/$JAR_NAME\" 2>/dev/null || true; systemctl restart url-shortener || true; exit 1; fi",
+              "sleep 10",
+              "systemctl is-active --quiet url-shortener",
+              "echo Deployment successful"
+            ]' \
+            --query 'Command.CommandId' \
+            --output text)
+
+          echo "SSM command ID: $COMMAND_ID"
+
+          for attempt in $(seq 1 30); do
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" \
+              --instance-id "$INSTANCE_ID" \
+              --query 'Status' \
+              --output text 2>/dev/null || true)
+
+            echo "Deployment status: $STATUS"
+
+            case "$STATUS" in
+              Success)
+                echo "Deployment completed successfully."
+                exit 0
+                ;;
+              Failed|Cancelled|TimedOut)
+                aws ssm get-command-invocation \
+                  --command-id "$COMMAND_ID" \
+                  --instance-id "$INSTANCE_ID" \
+                  --query '{Status:Status,Error:ErrorDetails,Output:StandardOutputContent,Errors:StandardErrorContent}' \
+                  --output json || true
+                exit 1
+                ;;
+            esac
+
+            sleep 10
+          done
+
+          echo "Timed out waiting for deployment command."
+          exit 1
