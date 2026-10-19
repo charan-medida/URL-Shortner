@@ -38,7 +38,7 @@ class UserController {
         try {
             User user = userRepository.findByUsername(loginRequest.getUsername());
             
-
+            log.info("Auto-deployment test successful");
             if (user == null || !user.getPassword().equals(loginRequest.getPassword())) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid credentials");
             }
