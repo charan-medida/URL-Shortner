@@ -8,6 +8,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 @RestController
@@ -18,6 +20,9 @@ class UserController {
     
     @Autowired
     private JwtUtil jwtUtil;
+    
+    private static final Logger log =
+            LoggerFactory.getLogger(UserController.class);
     
     @PostMapping("/registerUser")
     public ResponseEntity<String> registerUser(@RequestBody User user) {
