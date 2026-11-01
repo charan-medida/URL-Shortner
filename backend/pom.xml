@@ -102,6 +102,12 @@
                         <artifactId>bucket4j_jdk17-core</artifactId>
                         <version>8.14.0</version>
                  </dependency>
+		<!-- AWS SDK for Step Functions -->
+		<dependency>
+		    <groupId>software.amazon.awssdk</groupId>
+		    <artifactId>sfn</artifactId>
+		    <version>2.25.60</version>
+		</dependency>
 	
    <dependency>
      <groupId>org.scala-lang</groupId>
